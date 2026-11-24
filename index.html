@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Konfetti Studio — Package Builder &amp; Booking Intake</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Header -->
+    <header class="site-header">
+      <div class="brand-group">
+        <span class="brand-kicker">konfetti studio events &amp; creations</span>
+        <h1 class="brand-title">Event Package Builder &amp; Booking Form</h1>
+        <p class="brand-subtitle">Complete these 4 simple steps to see your estimated package and delivery fee, then send a neat booking summary straight to Kiara &amp; Symmone.</p>
+      </div>
+      <div class="header-actions">
+        <button type="button" id="theme-toggle-btn" class="pill-btn" onclick="toggleTheme()">
+          <span id="theme-toggle-icon" aria-hidden="true">🌙</span>
+          <span id="theme-toggle-text">Dark Mode</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 4-Step Wizard Navigation -->
+    <nav class="wizard-nav" aria-label="Booking steps">
+      <button type="button" class="step-tab is-active" id="tab-step-1" onclick="goToStep(1)">
+        <span class="step-num">1</span>
+        <span class="step-tab-label">
+          <span>Event &amp; Venue</span>
+          <span class="step-tab-sub">Required first</span>
+        </span>
+      </button>
+      <button type="button" class="step-tab" id="tab-step-2" onclick="goToStep(2)">
+        <span class="step-num">2</span>
+        <span class="step-tab-label">
+          <span>Choose Services</span>
+          <span class="step-tab-sub">Combos &amp; setups</span>
+        </span>
+      </button>
+      <button type="button" class="step-tab" id="tab-step-3" onclick="goToStep(3)">
+        <span class="step-num">3</span>
+        <span class="step-tab-label">
+          <span>Optional Notes</span>
+          <span class="step-tab-sub">Theme &amp; access</span>
+        </span>
+      </button>
+      <button type="button" class="step-tab is-locked" id="tab-step-4" onclick="attemptStep4()" aria-disabled="true">
+        <span class="step-num" id="step4-badge">🔒</span>
+        <span class="step-tab-label">
+          <span>Summary &amp; Send</span>
+          <span class="step-tab-sub" id="step4-sub">Complete Steps 1–2</span>
+        </span>
+      </button>
+    </nav>
+
+    <!-- Main 2-Column Content -->
+    <main class="wizard-grid">
+      <div>
+        <!-- STEP 1: Event Details & Location -->
+        <section id="panel-step-1" class="card" aria-labelledby="heading-step-1">
+          <div class="card-header">
+            <h2 class="section-title" id="heading-step-1">Step 1: Event Details &amp; Venue Location</h2>
+            <p class="section-desc">Fill in all required details below. Our system automatically detects whether your venue is within Metro Manila (NCR) or Out-of-NCR to compute delivery accurately.</p>
+          </div>
+
+          <div id="step1-error-box" class="callout callout--error is-hidden" role="alert">
+            <p class="callout-title">Please complete all required fields before proceeding:</p>
+            <p class="callout-text" id="step1-error-text"></p>
+          </div>
+
+          <div class="form-grid">
+            <div class="field-group">
+              <label class="field-label" for="input-customer-name">
+                Customer Name <span class="req-mark">Required</span>
+              </label>
+              <input type="text" id="input-customer-name" class="text-input" placeholder="e.g., Maria Santos" oninput="handleDetailsInput()" autocomplete="name">
+            </div>
+
+            <div class="field-group">
+              <label class="field-label" for="input-event-date">
+                Event Date <span class="req-mark">Required</span>
+              </label>
+              <input type="date" id="input-event-date" class="text-input" onchange="handleDetailsInput()">
+            </div>
+
+            <div class="field-group">
+              <label class="field-label" for="input-start-time">
+                Event Start Time <span class="req-mark">Required</span>
+              </label>
+              <input type="time" id="input-start-time" class="text-input" onchange="handleDetailsInput()" oninput="handleDetailsInput()">
+              <p class="field-hint">Select exact start time (e.g., 02:00 PM)</p>
+            </div>
+
+            <div class="field-group">
+              <label class="field-label" for="input-end-time">
+                Event End Time <span class="req-mark">Required</span>
+              </label>
+              <input type="time" id="input-end-time" class="text-input" onchange="handleDetailsInput()" oninput="handleDetailsInput()">
+              <p class="field-hint">Select exact end time (e.g., 05:00 PM)</p>
+            </div>
+
+            <div class="field-group field-group--full">
+              <div class="label-with-badge">
+                <label class="field-label" for="input-venue-address">
+                  Venue Address / Landmark <span class="req-mark">Required</span>
+                </label>
+                <span class="detected-zone-badge" id="detected-region-badge" aria-live="polite">
+                  Auto-Detected: Metro Manila (NCR)
+                </span>
+              </div>
+              <p class="field-hint">Type your street, barangay, city, or landmark, or drag the balloon pin on the map. Your service zone updates automatically.</p>
+              <div class="autocomplete-wrap">
+                <input type="text" id="input-venue-address" class="text-input" placeholder="e.g., 14 West Avenue, Brgy. Nayong Kanluran, Quezon City" oninput="handleAddressTyping()" onfocus="handleAddressTyping()" autocomplete="off">
+                <div id="address-suggestions" class="suggestions-list" role="listbox" aria-label="Matching venues and areas"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Interactive Map & Kilometer Transport Engine -->
+          <div class="map-panel">
+            <div class="map-legend">
+              <span><strong>Interactive Delivery Pin Map:</strong> Drag the 🎈 pin or click anywhere on the map to pinpoint your venue.</span>
+              <span id="coord-readout">Pin: 14.6462, 121.0285</span>
+            </div>
+            <div id="venue-map" aria-label="Interactive vector map showing Quezon City origin and draggable venue balloon pin"></div>
+            <div class="transport-readout">
+              <div class="transport-top">
+                <span>Estimated Delivery &amp; Transport Fee</span>
+                <span class="transport-price" id="transport-fee-display">Est. ~₱315</span>
+              </div>
+              <div class="transport-math" id="transport-math-display">
+                Baseline ₱300 (Metro Manila) + 1.0 km × ₱15/km from Quezon City origin
+              </div>
+              <p class="transport-disclaimer">
+                Estimate only — final transport fee will be confirmed by Kiara &amp; Symmone based on equipment size and venue access. (Standalone Face Painting or Balloon Twisting can travel by motorcycle at lower rates.)
+              </p>
+            </div>
+          </div>
+
+          <div class="wizard-actions">
+            <span></span>
+            <button type="button" class="pill-btn pill-btn--primary" onclick="nextFromStep1()">
+              Continue to Step 2: Choose Services →
+            </button>
+          </div>
+        </section>
+
+        <!-- STEP 2: Choose Your Services -->
+        <section id="panel-step-2" class="card is-hidden" aria-labelledby="heading-step-2">
+          <div class="card-header">
+            <h2 class="section-title" id="heading-step-2">Step 2: Choose Your Services</h2>
+            <p class="section-desc">Tap a category button below to view its packages. Pick either one Featured Promo Combo OR mix and match one package per individual category.</p>
+          </div>
+
+          <div id="promo-lockout-banner" class="callout callout--warning is-hidden" role="status">
+            <p class="callout-title">Featured Promo Combo Selected</p>
+            <p class="callout-text">All other categories and add-ons are locked while a Promo Combo is active. Click your selected Promo Combo again to deselect it if you prefer individual packages.</p>
+          </div>
+
+          <div id="service-category-tabs" class="category-tabs" role="tablist" aria-label="Service categories"></div>
+          <div id="services-container" class="services-stack"></div>
+
+          <div class="callout">
+            <p class="callout-title">Have a Theme or Motif in Mind?</p>
+            <p class="callout-text">You can send your peg or reference photos directly to Kiara &amp; Symmone in Facebook Messenger right after copying your summary.</p>
+          </div>
+
+          <div class="wizard-actions">
+            <button type="button" class="pill-btn" onclick="goToStep(1)">
+              ← Back to Event Details
+            </button>
+            <button type="button" class="pill-btn pill-btn--primary" onclick="goToStep(3)">
+              Continue to Step 3: Optional Notes →
+            </button>
+          </div>
+        </section>
+
+        <!-- STEP 3: Optional Notes & Details -->
+        <section id="panel-step-3" class="card is-hidden" aria-labelledby="heading-step-3">
+          <div class="card-header">
+            <h2 class="section-title" id="heading-step-3">Step 3: Optional Notes &amp; Details</h2>
+            <p class="section-desc">Share any theme motif, celebrant details, or venue setup notes to help us prepare faster.</p>
+          </div>
+
+          <div class="form-grid">
+            <div class="field-group field-group--full">
+              <label class="field-label" for="input-motif">Theme / Color Motif (Optional)</label>
+              <input type="text" id="input-motif" class="text-input" placeholder="e.g., Sage Green &amp; Cream Safari (or send peg photos in Messenger)" oninput="handleNotesInput()">
+            </div>
+
+            <div class="field-group field-group--full">
+              <label class="field-label" for="input-celebrant">Celebrant Name &amp; Occasion (Optional)</label>
+              <input type="text" id="input-celebrant" class="text-input" placeholder="e.g., Mateo's 7th Birthday" oninput="handleNotesInput()">
+            </div>
+
+            <div class="field-group field-group--full">
+              <label class="field-label" for="input-notes">Venue Access &amp; Setup Notes (Optional)</label>
+              <textarea id="input-notes" class="textarea-input" placeholder="e.g., 2nd floor function hall, elevator available, gate pass required 1 hour before" oninput="handleNotesInput()"></textarea>
+            </div>
+          </div>
+
+          <div class="callout">
+            <p class="callout-title">Peg / Reference Photos</p>
+            <p class="callout-text">No need to upload photos here — simply attach your peg or color palette screenshots directly inside our Facebook Messenger chat after pasting your summary.</p>
+          </div>
+
+          <div class="wizard-actions">
+            <button type="button" class="pill-btn" onclick="goToStep(2)">
+              ← Back to Services
+            </button>
+            <button type="button" class="pill-btn pill-btn--primary" id="btn-to-step-4" onclick="attemptStep4()">
+              Review Summary &amp; Send →
+            </button>
+          </div>
+        </section>
+
+        <!-- STEP 4: Summary & Send -->
+        <section id="panel-step-4" class="card is-hidden" aria-labelledby="heading-step-4">
+          <div class="card-header">
+            <h2 class="section-title" id="heading-step-4">Step 4: Booking Summary &amp; Send</h2>
+            <p class="section-desc">Review your itemized estimate below, then copy your complete booking summary and message Kiara &amp; Symmone.</p>
+          </div>
+
+          <div class="receipt-card" id="receipt-card">
+            <div class="receipt-top-bar">
+              <strong class="receipt-brand">konfetti studio — Booking Estimate</strong>
+              <span class="balloon-badge" id="receipt-total-badge">🎈 Est. ~₱0</span>
+            </div>
+
+            <div id="receipt-event-meta" class="receipt-meta-grid"></div>
+
+            <table class="receipt-table" aria-label="Itemized package and delivery estimate">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Est. Rate</th>
+                </tr>
+              </thead>
+              <tbody id="receipt-items-body"></tbody>
+            </table>
+
+            <div id="receipt-policy-box" class="callout">
+              <p class="callout-title">Booking &amp; Estimate Policy</p>
+              <p class="callout-text" id="receipt-policy-text"></p>
+            </div>
+          </div>
+
+          <div class="send-stack">
+            <button type="button" class="pill-btn pill-btn--primary copy-cta-btn" id="copy-messenger-btn" onclick="copySummaryAndGuide()">
+              📋 Copy Summary &amp; Open Facebook Messenger
+            </button>
+
+            <div id="copy-success-banner" class="callout callout--positive is-hidden" role="status">
+              <p class="callout-title">✓ Summary Copied to Your Clipboard!</p>
+              <p class="callout-text">
+                Now open Facebook Messenger and paste this message to <strong>Konfetti Studio Events &amp; Creations</strong> (<strong>m.me/KonfettiStudioEvents</strong>), along with any peg or theme photos you want to share.
+              </p>
+              <div class="banner-actions">
+                <a href="https://m.me/KonfettiStudioEvents" target="_blank" rel="noopener noreferrer" class="pill-btn pill-btn--primary">Open Messenger</a>
+                <button type="button" class="pill-btn" onclick="selectPreviewText()">Select All Text</button>
+                <button type="button" class="pill-btn" onclick="downloadSummaryFile()">Save Summary (.txt)</button>
+              </div>
+            </div>
+
+            <label class="field-label" for="dm-preview-textarea">Formatted Message Preview (Ready to Paste)</label>
+            <textarea id="dm-preview-textarea" class="dm-preview-box" readonly></textarea>
+          </div>
+
+          <div class="wizard-actions">
+            <button type="button" class="pill-btn" onclick="goToStep(3)">
+              ← Back to Optional Notes
+            </button>
+            <button type="button" class="pill-btn" id="start-over-btn" onclick="resetBookingForm(this)">
+              Start New Booking
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Column: Live Estimate & Readiness Guardrail -->
+      <aside class="sidebar-card" aria-label="Live booking readiness and estimate">
+        <div class="card-header">
+          <h2 class="section-title sidebar-title">Your Live Estimate</h2>
+          <p class="section-desc">Updates automatically as you fill in details.</p>
+        </div>
+
+        <div class="checklist-stack">
+          <div class="checklist-item">
+            <span class="status-pill" id="chk-name">•</span>
+            <span>Customer Name</span>
+          </div>
+          <div class="checklist-item">
+            <span class="status-pill" id="chk-date">•</span>
+            <span>Event Date &amp; Time</span>
+          </div>
+          <div class="checklist-item">
+            <span class="status-pill" id="chk-venue">•</span>
+            <span>Venue &amp; Auto-Detected Zone</span>
+          </div>
+          <div class="checklist-item">
+            <span class="status-pill" id="chk-service">•</span>
+            <span>At least 1 Service Selected</span>
+          </div>
+        </div>
+
+        <div id="guardrail-warning" class="callout callout--warning is-hidden" role="status">
+          <p class="callout-title">Step 4 is Locked</p>
+          <p class="callout-text" id="guardrail-warning-text"></p>
+        </div>
+
+        <div id="sidebar-items" class="sidebar-items-stack"></div>
+
+        <div class="quote-total-row">
+          <span>Est. Total</span>
+          <span id="sidebar-total">Est. ~₱0</span>
+        </div>
+
+        <p class="field-hint">
+          Final rates &amp; date availability will be confirmed by Kiara &amp; Symmone in Messenger.
+        </p>
+      </aside>
+    </main>
+
+    <!-- Footer with Password-Protected Owner Settings Link -->
+    <footer class="site-footer">
+      <div>
+        <strong>konfetti studio events &amp; creations</strong> — Quezon City, Metro Manila
+      </div>
+      <div>
+        <button type="button" class="pill-btn owner-trigger-btn" onclick="toggleOwnerGate()">
+          Owner Settings (Kiara &amp; Symmone)
+        </button>
+      </div>
+    </footer>
+
+    <!-- Password Gate & Owner Admin Panel -->
+    <section id="owner-gate-section" class="admin-panel is-hidden" aria-label="Owner settings access">
+      <div class="card-header">
+        <h2 class="section-title owner-title">Owner Pricing, Photos &amp; Availability Settings</h2>
+        <p class="section-desc">Update workshop coordinates, transport rates, package prices, preview images, and availability status.</p>
+      </div>
+
+      <div id="owner-login-box" class="owner-login-row">
+        <div class="field-group owner-pwd-field">
+          <label class="field-label" for="owner-password-input">Owner Password</label>
+          <input type="password" id="owner-password-input" class="text-input" placeholder="Enter owner password" onkeydown="if(event.key==='Enter'){unlockOwnerPanel();}">
+        </div>
+        <button type="button" class="pill-btn pill-btn--primary" onclick="unlockOwnerPanel()">Unlock Settings</button>
+        <button type="button" class="pill-btn" onclick="toggleOwnerGate()">Close</button>
+      </div>
+
+      <div id="owner-login-error" class="callout callout--error is-hidden" role="alert">
+        <p class="callout-title">Incorrect Password</p>
+        <p class="callout-text">Please check the password with Kiara or Symmone and try again.</p>
+      </div>
+
+      <!-- Unlocked Admin Controls -->
+      <div id="owner-editor-box" class="is-hidden owner-editor-stack">
+        <div id="owner-save-banner" class="callout callout--positive is-hidden" role="status">
+          <p class="callout-title">✓ Settings Saved to This Browser</p>
+          <p class="callout-text">Changes are active immediately on this device. To publish updated prices, images, or availability to all customers on Vercel, click <strong>"Copy Updated app.js Config"</strong> below and paste it into the top of <code>app.js</code>.</p>
+        </div>
+
+        <div class="form-grid">
+          <div class="field-group field-group--full">
+            <label class="field-label" for="adm-origin-name">1. Workshop Origin Address Label</label>
+            <input type="text" id="adm-origin-name" class="text-input">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="adm-origin-lat">Origin Latitude</label>
+            <input type="number" step="0.0001" id="adm-origin-lat" class="text-input">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="adm-origin-lng">Origin Longitude</label>
+            <input type="number" step="0.0001" id="adm-origin-lng" class="text-input">
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="adm-base-mm">2a. Metro Manila (NCR) Baseline Fee (₱)</label>
+            <input type="number" min="0" step="50" id="adm-base-mm" class="text-input">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="adm-base-out">2b. Out-of-NCR Baseline Fee (₱)</label>
+            <input type="number" min="0" step="50" id="adm-base-out" class="text-input">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="adm-per-km">3. Per-Kilometer Transport Rate (₱/km)</label>
+            <input type="number" min="0" step="1" id="adm-per-km" class="text-input">
+          </div>
+        </div>
+
+        <div class="owner-catalog-section">
+          <h3 class="category-title">4. Package Prices, Preview Pictures &amp; Availability</h3>
+          <p class="field-hint">Paste an image URL (e.g., <code>https://...</code>) or relative path (e.g., <code>images/joyful.jpg</code>), and toggle whether each package is currently available for booking.</p>
+          <div id="adm-packages-grid" class="admin-price-grid"></div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="adm-policy-text">5. Custom DM Summary Policy Text</label>
+          <textarea id="adm-policy-text" class="textarea-input"></textarea>
+        </div>
+
+        <div class="owner-footer-actions">
+          <div class="owner-btn-cluster">
+            <button type="button" class="pill-btn pill-btn--primary" onclick="saveOwnerSettings()">Save Owner Settings</button>
+            <button type="button" class="pill-btn" onclick="copyConfigSnippet(this)">Copy Config for Vercel (app.js)</button>
+            <button type="button" class="pill-btn" onclick="resetOwnerDefaults(this)">Reset to Defaults</button>
+          </div>
+          <button type="button" class="pill-btn" onclick="lockOwnerPanel()">Lock &amp; Close</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
