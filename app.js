@@ -1,7 +1,7 @@
 /* =====================================================================
    1. DEFAULT CONFIGURATION & CATALOG
    ===================================================================== */
-const STORAGE_KEY = `konfetti_studio_booking_v2`;
+const STORAGE_KEY = `konfetti_studio_booking_v3`;
 
 const DEFAULT_SETTINGS = {
   originName: `Konfetti Studio Workshop (Quezon City)`,
@@ -10,6 +10,8 @@ const DEFAULT_SETTINGS = {
   baseMm: 300,
   baseOut: 800,
   perKmRate: 15,
+  bufferHours: 2,
+  blockedSlots: [],
   policyText: `A reservation down payment is required to lock your event date. Final transport fee and date slot availability will be confirmed by Kiara & Symmone once we review your venue details and peg photos in Messenger.`,
   prices: {
     combo_joyful: 5500,
@@ -24,7 +26,7 @@ const DEFAULT_SETTINGS = {
     balloon_twist_only: 1999,
     face_paint_only: 1999,
     paint_and_twist: 2999,
-    addon_styro_name: 450,
+    addon_styro_name: 0,
     addon_bending_lights: 500,
     addon_balloon_pillar: 750,
     addon_giveaways: 800
@@ -64,10 +66,40 @@ const DEFAULT_SETTINGS = {
     addon_bending_lights: true,
     addon_balloon_pillar: true,
     addon_giveaways: true
+  },
+  optionConfig: {
+    face_paint_only: {
+      type: `duration_artist`,
+      tiers: [
+        { label: `2 Hours (1 Artist)`, delta: 0 },
+        { label: `3 Hours (1 Artist)`, delta: 500 },
+        { label: `2 Hours + Extra Artist`, delta: 1200 }
+      ]
+    },
+    paint_and_twist: {
+      type: `duration_artist`,
+      tiers: [
+        { label: `2 Hours Standard`, delta: 0 },
+        { label: `3 Hours Extended`, delta: 600 }
+      ]
+    },
+    balloon_twist_only: {
+      type: `duration_artist`,
+      tiers: [
+        { label: `2 Hours Twisting`, delta: 0 },
+        { label: `3 Hours Twisting`, delta: 500 }
+      ]
+    },
+    addon_styro_name: {
+      type: `per_letter`,
+      sizeLabel: `6–7 inches height`,
+      ratePerLetter: 35,
+      defaultLetters: 8
+    }
   }
 };
 
-const CATALOG_CATEGORIES = [
+let CATALOG_CATEGORIES = [
   {
     id: `combos`,
     title: `Featured Promo Combos`,
@@ -118,7 +150,7 @@ const CATALOG_CATEGORIES = [
     ruleLabel: `Multi-select (when no Promo Combo)`,
     mode: `multi`,
     items: [
-      { id: `addon_styro_name`, name: `Custom Styrofoam Name Standee`, placeholderIcon: `🔤`, desc: `Hand-cut personalized celebrant name lettering for backdrop or cake table.` },
+      { id: `addon_styro_name`, name: `Custom Styrofoam Name Standee`, placeholderIcon: `🔤`, desc: `Hand-cut personalized celebrant name lettering (6–7 inches, priced per letter).` },
       { id: `addon_bending_lights`, name: `Bending Lights (Pair)`, placeholderIcon: `💡`, desc: `Warm spotlighting to highlight your backdrop styling indoors or at dusk.` },
       { id: `addon_balloon_pillar`, name: `Extra Balloon Column / Pillar`, placeholderIcon: `🎈`, desc: `Freestanding balloon pillar accent for entrance or stage framing.` },
       { id: `addon_giveaways`, name: `Personalized Giveaways (20 pcs)`, placeholderIcon: `🎁`, desc: `Custom party loot bags or themed giveaway souvenirs.` }
@@ -171,12 +203,11 @@ const VENUE_DIRECTORY = [
   { label: `Malolos City, Bulacan`, lat: 14.8433, lng: 120.8114, region: `out` }
 ];
 
-/* Keywords to automatically flag Out-of-NCR addresses even if typed manually */
 const OUT_OF_NCR_KEYWORDS = [
   `rizal`, `antipolo`, `cainta`, `taytay`, `angono`, `binangonan`, `san mateo`, `rodriguez`, `montalban`, `tanay`, `morong`, `teresa`,
-  `cavite`, `bacoor`, `imus`, `dasmarinas`, `dasmariñas`, `tagaytay`, `silang`, `general trias`, `gen trias`, `trece martires`, `trento`, `kawit`, `rosario`, `tanz`, `naic`,
+  `cavite`, `bacoor`, `imus`, `dasmarinas`, `dasmariñas`, `tagaytay`, `silang`, `general trias`, `gen trias`, `trece martires`, `kawit`, `rosario`, `naic`,
   `laguna`, `san pedro`, `binan`, `biñan`, `sta rosa`, `santa rosa`, `nuvali`, `cabuyao`, `calamba`, `los banos`, `los baños`, `san pablo`,
-  `bulacan`, `meycauayan`, `marilao`, `bocaue`, `balagtas`, `guiguinto`, `malolos`, `sjdm`, `san jose del monte`, `sta maria`, `santa maria`, `pldel`, `pulilan`, `baliuag`,
+  `bulacan`, `meycauayan`, `marilao`, `bocaue`, `balagtas`, `guiguinto`, `malolos`, `sjdm`, `san jose del monte`, `sta maria`, `santa maria`, `pulilan`, `baliuag`,
   `pampanga`, `batangas`, `tarlac`, `subic`, `zambales`, `quezon province`, `lucena`
 ];
 
@@ -205,8 +236,10 @@ let appState = {
   currentStep: 1,
   activeServiceCategory: `combos`,
   settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
+  customCategories: null,
   booking: {
     customerName: ``,
+    guestCount: ``,
     eventDate: ``,
     startTime: ``,
     endTime: ``,
@@ -221,6 +254,7 @@ let appState = {
       facepaint: null,
       addons: []
     },
+    itemOptions: {},
     motif: ``,
     celebrant: ``,
     notes: ``
@@ -238,7 +272,8 @@ let ownerUnlocked = false;
 
 function persistState() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+    const payload = Object.assign({}, appState, { customCategories: CATALOG_CATEGORIES });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch (err) {
     /* Ignore storage quota errors */
   }
@@ -253,11 +288,16 @@ function loadSavedState() {
       if (saved.theme) appState.theme = saved.theme;
       if (saved.currentStep) appState.currentStep = saved.currentStep;
       if (saved.activeServiceCategory) appState.activeServiceCategory = saved.activeServiceCategory;
+      if (Array.isArray(saved.customCategories) && saved.customCategories.length > 0) {
+        CATALOG_CATEGORIES = saved.customCategories;
+      }
       if (saved.settings) {
         appState.settings = Object.assign({}, DEFAULT_SETTINGS, saved.settings);
         appState.settings.prices = Object.assign({}, DEFAULT_SETTINGS.prices, saved.settings.prices || {});
         appState.settings.images = Object.assign({}, DEFAULT_SETTINGS.images, saved.settings.images || {});
         appState.settings.availability = Object.assign({}, DEFAULT_SETTINGS.availability, saved.settings.availability || {});
+        appState.settings.optionConfig = Object.assign({}, DEFAULT_SETTINGS.optionConfig, saved.settings.optionConfig || {});
+        appState.settings.blockedSlots = Array.isArray(saved.settings.blockedSlots) ? saved.settings.blockedSlots : [];
       }
       if (saved.booking) {
         appState.booking = Object.assign({}, appState.booking, saved.booking);
@@ -265,6 +305,7 @@ function loadSavedState() {
           { combos: null, backdrops: null, clowns: null, facepaint: null, addons: [] },
           saved.booking.selections || {}
         );
+        appState.booking.itemOptions = Object.assign({}, saved.booking.itemOptions || {});
       }
     }
   } catch (err) {
@@ -273,7 +314,7 @@ function loadSavedState() {
 }
 
 /* =====================================================================
-   3. AUTOMATIC REGION DETECTION & DISTANCE ENGINE
+   3. HELPERS, PRICING, SCHEDULE BUFFER & REGION ENGINE
    ===================================================================== */
 function formatPeso(num) {
   const n = Math.round(Number(num) || 0);
@@ -291,6 +332,16 @@ function formatTime12Hour(timeStr) {
   const period = hours >= 12 ? `PM` : `AM`;
   hours = hours % 12 || 12;
   return `${hours}:${mins} ${period}`;
+}
+
+function parseTimeToHours(timeStr) {
+  const val = String(timeStr || ``).trim();
+  if (!val || val.indexOf(`:`) === -1) return null;
+  const parts = val.split(`:`);
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h + (m / 60);
 }
 
 function escapeHtml(str) {
@@ -316,22 +367,16 @@ function pointInNcr(lat, lng) {
 
 function classifyRegionAutomatically(addressText, lat, lng) {
   const text = String(addressText || ``).toLowerCase();
-
-  /* 1. Check explicit Out-of-NCR provincial/city keywords first */
   for (let i = 0; i < OUT_OF_NCR_KEYWORDS.length; i++) {
     if (text.indexOf(OUT_OF_NCR_KEYWORDS[i]) !== -1) {
       return `out`;
     }
   }
-
-  /* 2. Check explicit Metro Manila city keywords */
   for (let j = 0; j < NCR_KEYWORDS.length; j++) {
     if (text.indexOf(NCR_KEYWORDS[j]) !== -1) {
       return pointInNcr(lat, lng) ? `mm` : `out`;
     }
   }
-
-  /* 3. Fall back to map pin polygon check */
   return pointInNcr(lat, lng) ? `mm` : `out`;
 }
 
@@ -374,8 +419,83 @@ function computeTransportDetails() {
   };
 }
 
+function evaluateScheduleConflicts() {
+  const dateStr = appState.booking.eventDate;
+  const startH = parseTimeToHours(appState.booking.startTime);
+  const endH = parseTimeToHours(appState.booking.endTime);
+  const bufferH = Math.max(0, Number(appState.settings.bufferHours || 0));
+  const slots = Array.isArray(appState.settings.blockedSlots) ? appState.settings.blockedSlots : [];
+
+  const matchingSlots = dateStr ? slots.filter(function (s) { return s.date === dateStr; }) : [];
+  const warnings = [];
+
+  if (dateStr && matchingSlots.length > 0) {
+    matchingSlots.forEach(function (slot) {
+      if (!slot.startTime || !slot.endTime) {
+        warnings.push(`${slot.date} is marked Unavailable (${slot.label || `Whole Day Blocked`}).`);
+        return;
+      }
+      const bStart = parseTimeToHours(slot.startTime);
+      const bEnd = parseTimeToHours(slot.endTime);
+      const slotLabel = `${formatTime12Hour(slot.startTime)}–${formatTime12Hour(slot.endTime)}`;
+
+      if (startH !== null && endH !== null && bStart !== null && bEnd !== null) {
+        /* Overlap or buffer violation */
+        const reqStart = startH - bufferH;
+        const reqEnd = endH + bufferH;
+        const overlaps = (startH < bEnd) && (endH > bStart);
+        const tightBuffer = !overlaps && (reqStart < bEnd) && (reqEnd > bStart);
+        if (overlaps) {
+          warnings.push(`Overlaps with blocked slot ${slotLabel} (${slot.label || `Booked/Unavailable`}).`);
+        } else if (tightBuffer) {
+          warnings.push(`Less than ${bufferH}h travel/setup buffer around ${slotLabel} (${slot.label || `Booked Slot`}).`);
+        }
+      } else {
+        warnings.push(`Blocked slot on ${slot.date}: ${slotLabel} (${slot.label || `Unavailable`}).`);
+      }
+    });
+  }
+
+  return { matchingSlots: matchingSlots, warnings: warnings };
+}
+
 function isItemAvailable(itemId) {
   return appState.settings.availability[itemId] !== false;
+}
+
+function getItemOptionConfig(itemId) {
+  return (appState.settings.optionConfig && appState.settings.optionConfig[itemId]) || null;
+}
+
+function getConfiguredItemPriceAndDetail(itemId) {
+  const basePrice = Number(appState.settings.prices[itemId] || 0);
+  const cfg = getItemOptionConfig(itemId);
+  const optState = (appState.booking.itemOptions && appState.booking.itemOptions[itemId]) || {};
+
+  if (!cfg) {
+    return { price: basePrice, detail: `` };
+  }
+
+  if (cfg.type === `duration_artist`) {
+    const tiers = Array.isArray(cfg.tiers) && cfg.tiers.length > 0 ? cfg.tiers : [{ label: `Standard`, delta: 0 }];
+    const idx = Math.min(Math.max(0, Number(optState.tierIndex || 0)), tiers.length - 1);
+    const chosen = tiers[idx];
+    return {
+      price: basePrice + Number(chosen.delta || 0),
+      detail: chosen.label
+    };
+  }
+
+  if (cfg.type === `per_letter`) {
+    const rate = Number(cfg.ratePerLetter || 35);
+    const letters = Math.max(1, parseInt(optState.letters || cfg.defaultLetters || 8, 10) || 8);
+    return {
+      price: basePrice + (letters * rate),
+      detail: `${letters} letters @ ${formatPeso(rate)}/letter (${cfg.sizeLabel || `6–7 in`})`
+    };
+  }
+
+  return { price: basePrice, detail: `` };
 }
 
 function findCatalogItem(itemId) {
@@ -383,10 +503,12 @@ function findCatalogItem(itemId) {
     const cat = CATALOG_CATEGORIES[i];
     for (let j = 0; j < cat.items.length; j++) {
       if (cat.items[j].id === itemId) {
+        const calc = getConfiguredItemPriceAndDetail(itemId);
         return {
           cat: cat,
           item: cat.items[j],
-          price: Number(appState.settings.prices[itemId] || 0),
+          price: calc.price,
+          optionDetail: calc.detail,
           available: isItemAvailable(itemId)
         };
       }
@@ -433,6 +555,7 @@ function getValidationStatus() {
   const b = appState.booking;
   const missing = [];
   const hasName = b.customerName.trim().length > 0;
+  const hasPax = Number(b.guestCount) > 0;
   const hasDate = b.eventDate.trim().length > 0;
   const hasStart = b.startTime.trim().length > 0;
   const hasEnd = b.endTime.trim().length > 0;
@@ -441,6 +564,7 @@ function getValidationStatus() {
   const hasService = items.length > 0;
 
   if (!hasName) missing.push(`Customer Name`);
+  if (!hasPax) missing.push(`Guest Count (Pax)`);
   if (!hasDate) missing.push(`Event Date`);
   if (!hasStart) missing.push(`Event Start Time`);
   if (!hasEnd) missing.push(`Event End Time`);
@@ -449,13 +573,15 @@ function getValidationStatus() {
 
   return {
     hasName: hasName,
+    hasPax: hasPax,
+    hasNameAndPax: hasName && hasPax,
     hasDateTime: hasDate && hasStart && hasEnd,
     hasDate: hasDate,
     hasStart: hasStart,
     hasEnd: hasEnd,
     hasVenue: hasVenue,
     hasService: hasService,
-    step1Complete: hasName && hasDate && hasStart && hasEnd && hasVenue,
+    step1Complete: hasName && hasPax && hasDate && hasStart && hasEnd && hasVenue,
     allComplete: missing.length === 0,
     missing: missing
   };
@@ -729,11 +855,13 @@ document.addEventListener(`click`, function (ev) {
    ===================================================================== */
 function handleDetailsInput() {
   const nameEl = document.getElementById(`input-customer-name`);
+  const paxEl = document.getElementById(`input-guest-count`);
   const dateEl = document.getElementById(`input-event-date`);
   const startEl = document.getElementById(`input-start-time`);
   const endEl = document.getElementById(`input-end-time`);
 
   if (nameEl) appState.booking.customerName = nameEl.value;
+  if (paxEl) appState.booking.guestCount = paxEl.value;
   if (dateEl) appState.booking.eventDate = dateEl.value;
   if (startEl) appState.booking.startTime = startEl.value;
   if (endEl) appState.booking.endTime = endEl.value;
@@ -766,6 +894,7 @@ function nextFromStep1() {
 
   const missingStep1 = [];
   if (!st.hasName) missingStep1.push(`Customer Name`);
+  if (!st.hasPax) missingStep1.push(`Guest Count (Pax)`);
   if (!st.hasDate) missingStep1.push(`Event Date`);
   if (!st.hasStart) missingStep1.push(`Event Start Time`);
   if (!st.hasEnd) missingStep1.push(`Event End Time`);
@@ -788,6 +917,7 @@ function nextFromStep1() {
 function highlightInvalidStep1Fields(st) {
   const pairs = [
     [`input-customer-name`, st.hasName],
+    [`input-guest-count`, st.hasPax],
     [`input-event-date`, st.hasDate],
     [`input-start-time`, st.hasStart],
     [`input-end-time`, st.hasEnd],
@@ -800,7 +930,7 @@ function highlightInvalidStep1Fields(st) {
 }
 
 function clearInvalidStep1Fields() {
-  [`input-customer-name`, `input-event-date`, `input-start-time`, `input-end-time`, `input-venue-address`].forEach(function (id) {
+  [`input-customer-name`, `input-guest-count`, `input-event-date`, `input-start-time`, `input-end-time`, `input-venue-address`].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.classList.remove(`is-invalid`);
   });
@@ -854,7 +984,7 @@ function renderStepVisibility() {
 }
 
 /* =====================================================================
-   8. STEP 2: CATEGORY TABS, SERVICES, AVAILABILITY & PROMO LOCKOUT
+   8. STEP 2: CATEGORY TABS, SUB-OPTIONS, PER-LETTER & PROMO LOCKOUT
    ===================================================================== */
 function selectServiceCategory(catId) {
   appState.activeServiceCategory = catId;
@@ -865,9 +995,63 @@ function selectServiceCategory(catId) {
 function getCategorySelectionCount(cat) {
   const sel = appState.booking.selections;
   if (cat.mode === `multi`) {
-    return Array.isArray(sel.addons) ? sel.addons.length : 0;
+    return Array.isArray(sel.addons) ? sel.addons.filter(isItemAvailable).length : 0;
   }
-  return sel[cat.id] ? 1 : 0;
+  return (sel[cat.id] && isItemAvailable(sel[cat.id])) ? 1 : 0;
+}
+
+function updateItemTierOption(itemId, tierIdx, ev) {
+  if (ev) ev.stopPropagation();
+  appState.booking.itemOptions[itemId] = Object.assign({}, appState.booking.itemOptions[itemId] || {}, {
+    tierIndex: Number(tierIdx)
+  });
+  renderServicesCatalog();
+  updateAllUI();
+  persistState();
+}
+
+function updateItemLettersOption(itemId, lettersVal, ev) {
+  if (ev) ev.stopPropagation();
+  const cleanLetters = Math.max(1, parseInt(lettersVal || 1, 10) || 1);
+  appState.booking.itemOptions[itemId] = Object.assign({}, appState.booking.itemOptions[itemId] || {}, {
+    letters: cleanLetters
+  });
+  renderServicesCatalog();
+  updateAllUI();
+  persistState();
+}
+
+function renderSubOptionsControl(itemId, isSelected) {
+  if (!isSelected) return ``;
+  const cfg = getItemOptionConfig(itemId);
+  if (!cfg) return ``;
+  const optState = appState.booking.itemOptions[itemId] || {};
+
+  if (cfg.type === `duration_artist` && Array.isArray(cfg.tiers)) {
+    const currentIdx = Math.min(Math.max(0, Number(optState.tierIndex || 0)), cfg.tiers.length - 1);
+    const optionsHtml = cfg.tiers.map(function (t, idx) {
+      const deltaText = Number(t.delta || 0) > 0 ? ` (+${formatPeso(t.delta)})` : ` (Base Rate)`;
+      return `<option value="${idx}" ${idx === currentIdx ? `selected` : ``}>${escapeHtml(t.label)}${deltaText}</option>`;
+    }).join(``);
+
+    return `<div class="pkg-options-panel" onclick="event.stopPropagation()">
+      <label class="pkg-opt-label" for="opt-tier-${itemId}">Duration / Artist Option:</label>
+      <select id="opt-tier-${itemId}" class="pkg-opt-select" onchange="updateItemTierOption('${itemId}', this.value, event)">
+        ${optionsHtml}
+      </select>
+    </div>`;
+  }
+
+  if (cfg.type === `per_letter`) {
+    const currentLetters = Math.max(1, parseInt(optState.letters || cfg.defaultLetters || 8, 10) || 8);
+    const rate = Number(cfg.ratePerLetter || 35);
+    return `<div class="pkg-options-panel" onclick="event.stopPropagation()">
+      <label class="pkg-opt-label" for="opt-letters-${itemId}">Number of Letters (${escapeHtml(cfg.sizeLabel || `6–7 in`)}, ${formatPeso(rate)}/letter):</label>
+      <input type="number" min="1" max="80" id="opt-letters-${itemId}" class="pkg-opt-num" value="${currentLetters}" oninput="updateItemLettersOption('${itemId}', this.value, event)">
+    </div>`;
+  }
+
+  return ``;
 }
 
 function renderServicesCatalog() {
@@ -876,7 +1060,7 @@ function renderServicesCatalog() {
   if (!container) return;
 
   const sel = appState.booking.selections;
-  const comboActive = Boolean(sel.combos);
+  const comboActive = Boolean(sel.combos && isItemAvailable(sel.combos));
 
   const validCat = CATALOG_CATEGORIES.find(function (c) {
     return c.id === appState.activeServiceCategory;
@@ -921,7 +1105,7 @@ function renderServicesCatalog() {
 
   const isLockedOut = comboActive && activeCat.mode !== `combo`;
   const cardsHtml = activeCat.items.map(function (item) {
-    const price = Number(appState.settings.prices[item.id] || 0);
+    const calc = getConfiguredItemPriceAndDetail(item.id);
     const available = isItemAvailable(item.id);
     const imgSrc = String(appState.settings.images[item.id] || ``).trim();
 
@@ -956,18 +1140,19 @@ function renderServicesCatalog() {
            <span class="pkg-preview-placeholder-label">Photo Preview Placeholder</span>
          </div>`;
 
-    return `<button type="button" class="pkg-card ${isSelected ? `is-selected` : ``} ${!available ? `is-unavailable` : ``}" ${isDisabled ? `disabled` : ``} onclick="toggleService('${activeCat.id}', '${activeCat.mode}', '${item.id}')">
+    return `<div class="pkg-card ${isSelected ? `is-selected` : ``} ${!available ? `is-unavailable` : ``}" role="button" tabindex="${isDisabled ? `-1` : `0`}" aria-disabled="${isDisabled ? `true` : `false`}" onclick="${isDisabled ? `` : `toggleService('${activeCat.id}', '${activeCat.mode}', '${item.id}')`}" onkeydown="if(!${isDisabled} && (event.key==='Enter'||event.key===' ')){event.preventDefault();toggleService('${activeCat.id}', '${activeCat.mode}', '${item.id}');}">
       <div class="pkg-card-top">
         <div class="pkg-badge-row">
-          <span class="balloon-badge">🎈 ${formatPeso(price)}</span>
+          <span class="balloon-badge">🎈 ${formatPeso(calc.price)}</span>
           ${!available ? `<span class="unavailable-pill">Unavailable</span>` : ``}
         </div>
         <h4 class="pkg-name">${safeName}</h4>
         <div class="pkg-preview-frame">${mediaHtml}</div>
         <p class="pkg-desc">${escapeHtml(item.desc)}</p>
+        ${renderSubOptionsControl(item.id, isSelected)}
       </div>
       <div class="pkg-status">${statusText}</div>
-    </button>`;
+    </div>`;
   }).join(``);
 
   container.innerHTML = `<div class="category-block ${isLockedOut ? `is-locked-out` : ``}" role="tabpanel">
@@ -1011,19 +1196,48 @@ function toggleService(catId, mode, itemId) {
 }
 
 /* =====================================================================
-   9. LIVE QUOTE, GUARDRAIL & STEP 4 RECEIPT
+   9. LIVE QUOTE, SCHEDULE READOUT, GUARDRAIL & STEP 4 RECEIPT
    ===================================================================== */
 function updateAllUI() {
   const st = getValidationStatus();
   const transport = computeTransportDetails();
   const items = getSelectedItemsList();
   const isOut = appState.booking.region === `out`;
+  const sched = evaluateScheduleConflicts();
 
   /* Auto-Detected Zone Badge in Step 1 */
   const zoneBadge = document.getElementById(`detected-region-badge`);
   if (zoneBadge) {
     zoneBadge.textContent = `Auto-Detected: ${transport.regionLabel}`;
     zoneBadge.classList.toggle(`is-out-ncr`, isOut);
+  }
+
+  /* Date Slots Readout & Buffer Warning */
+  const slotsBox = document.getElementById(`date-slots-readout`);
+  if (slotsBox) {
+    if (!appState.booking.eventDate) {
+      slotsBox.textContent = `Select an event date to view slots`;
+    } else if (sched.matchingSlots.length === 0) {
+      slotsBox.innerHTML = `<span class="slot-chip">No blocked slots listed (${Number(appState.settings.bufferHours || 0)}h buffer rule)</span>`;
+    } else {
+      slotsBox.innerHTML = sched.matchingSlots.map(function (s) {
+        const range = (s.startTime && s.endTime)
+          ? `${formatTime12Hour(s.startTime)}–${formatTime12Hour(s.endTime)}`
+          : `Whole Day`;
+        return `<span class="slot-chip is-blocked">Blocked: ${escapeHtml(range)} (${escapeHtml(s.label || `Unavailable`)})</span>`;
+      }).join(``);
+    }
+  }
+
+  const conflictBox = document.getElementById(`schedule-conflict-box`);
+  const conflictText = document.getElementById(`schedule-conflict-text`);
+  if (conflictBox && conflictText) {
+    if (sched.warnings.length > 0) {
+      conflictText.textContent = `${sched.warnings.join(` `)} Kiara & Symmone will review buffer feasibility in Messenger.`;
+      conflictBox.classList.remove(`is-hidden`);
+    } else {
+      conflictBox.classList.add(`is-hidden`);
+    }
   }
 
   /* Transport readout in Step 1 */
@@ -1037,7 +1251,7 @@ function updateAllUI() {
 
   /* Checklist indicators in Sidebar */
   const chkMap = [
-    [`chk-name`, st.hasName],
+    [`chk-name`, st.hasNameAndPax],
     [`chk-date`, st.hasDateTime],
     [`chk-venue`, st.hasVenue],
     [`chk-service`, st.hasService]
@@ -1076,7 +1290,8 @@ function updateAllUI() {
     } else {
       items.forEach(function (entry) {
         servicesTotal += entry.price;
-        rowsHtml += `<div class="quote-row"><span>${escapeHtml(entry.item.name)}</span><strong>${formatPeso(entry.price)}</strong></div>`;
+        const labelWithOpt = entry.optionDetail ? `${entry.item.name} (${entry.optionDetail})` : entry.item.name;
+        rowsHtml += `<div class="quote-row"><span>${escapeHtml(labelWithOpt)}</span><strong>${formatPeso(entry.price)}</strong></div>`;
       });
     }
     rowsHtml += `<div class="quote-row"><span>Est. Delivery (~${transport.km} km)</span><strong>Est. ~${formatPeso(transport.total)}</strong></div>`;
@@ -1102,10 +1317,13 @@ function buildFormattedDmSummary() {
   const b = appState.booking;
   const transport = computeTransportDetails();
   const items = getSelectedItemsList();
+  const sched = evaluateScheduleConflicts();
+
   let serviceSubtotal = 0;
   const itemLines = items.map(function (entry) {
     serviceSubtotal += entry.price;
-    return `- ${entry.item.name}: ${formatPeso(entry.price)}`;
+    const optPart = entry.optionDetail ? ` [${entry.optionDetail}]` : ``;
+    return `- ${entry.item.name}${optPart}: ${formatPeso(entry.price)}`;
   });
   const grandTotal = serviceSubtotal + transport.total;
   const formattedStart = formatTime12Hour(b.startTime);
@@ -1115,6 +1333,7 @@ function buildFormattedDmSummary() {
     `KONFETTI STUDIO BOOKING INQUIRY`,
     `==============================`,
     `Customer Name: ${b.customerName.trim()}`,
+    `Guest Count (Pax): ${b.guestCount} pax`,
     `Event Date: ${b.eventDate}`,
     `Event Time: ${formattedStart} - ${formattedEnd}`,
     `Detected Region: ${transport.regionLabel}`,
@@ -1123,6 +1342,10 @@ function buildFormattedDmSummary() {
     ``,
     `SELECTED PACKAGES & SERVICES:`,
     itemLines.join(`\n`),
+    ``,
+    `SETUP & LOGISTICS ACKNOWLEDGED:`,
+    `- On-site setup & preparation (1–2h setup, arriving 2–3h prior for full setups; ~15m for standalone face paint; ~30–60m travel)`,
+    sched.warnings.length > 0 ? `- Schedule / Buffer Note: ${sched.warnings.join(` `)}` : `- No blocked slot conflict flagged on selected date/time`,
     ``,
     `ESTIMATED FEES:`,
     `- Services Subtotal: ${formatPeso(serviceSubtotal)}`,
@@ -1151,7 +1374,7 @@ function renderStep4Receipt() {
   const metaEl = document.getElementById(`receipt-event-meta`);
   if (metaEl) {
     metaEl.innerHTML = `
-      <div><strong>Client:</strong> ${escapeHtml(b.customerName)}</div>
+      <div><strong>Client:</strong> ${escapeHtml(b.customerName)} &bull; <strong>Guest Count:</strong> ${escapeHtml(b.guestCount)} pax</div>
       <div><strong>Date &amp; Time:</strong> ${escapeHtml(b.eventDate)} &bull; ${escapeHtml(formattedStart)} – ${escapeHtml(formattedEnd)}</div>
       <div><strong>Venue (${escapeHtml(transport.regionLabel)}):</strong> ${escapeHtml(b.venueAddress)}</div>
       <div><strong>Theme / Celebrant:</strong> ${escapeHtml(b.motif || `Peg photos via Messenger`)} ${b.celebrant ? `(${escapeHtml(b.celebrant)})` : ``}</div>
@@ -1164,8 +1387,11 @@ function renderStep4Receipt() {
   if (tbody) {
     let rows = items.map(function (entry) {
       serviceSubtotal += entry.price;
+      const subLine = entry.optionDetail
+        ? `${escapeHtml(entry.cat.title)} &bull; <strong>${escapeHtml(entry.optionDetail)}</strong>`
+        : escapeHtml(entry.cat.title);
       return `<tr>
-        <td><strong>${escapeHtml(entry.item.name)}</strong><br><span style="font-size:0.9rem;color:var(--on-surface-variant);">${escapeHtml(entry.cat.title)}</span></td>
+        <td><strong>${escapeHtml(entry.item.name)}</strong><br><span style="font-size:0.9rem;color:var(--on-surface-variant);">${subLine}</span></td>
         <td>${formatPeso(entry.price)}</td>
       </tr>`;
     }).join(``);
@@ -1256,6 +1482,7 @@ function resetBookingForm(btn) {
   appState.activeServiceCategory = `combos`;
   appState.booking = {
     customerName: ``,
+    guestCount: ``,
     eventDate: ``,
     startTime: ``,
     endTime: ``,
@@ -1270,6 +1497,7 @@ function resetBookingForm(btn) {
       facepaint: null,
       addons: []
     },
+    itemOptions: {},
     motif: ``,
     celebrant: ``,
     notes: ``
@@ -1329,12 +1557,67 @@ function lockOwnerPanel() {
   if (gate) gate.classList.add(`is-hidden`);
 }
 
+function renderBlockedSlotsAdmin() {
+  const listEl = document.getElementById(`adm-blocked-slots-list`);
+  if (!listEl) return;
+  const slots = Array.isArray(appState.settings.blockedSlots) ? appState.settings.blockedSlots : [];
+  if (slots.length === 0) {
+    listEl.innerHTML = `<p class="field-hint">No blocked dates or time slots added yet.</p>`;
+    return;
+  }
+  listEl.innerHTML = slots.map(function (s, idx) {
+    const timeText = (s.startTime && s.endTime)
+      ? `${formatTime12Hour(s.startTime)} – ${formatTime12Hour(s.endTime)}`
+      : `Whole Day`;
+    return `<div class="blocked-slot-row">
+      <span><strong>${escapeHtml(s.date)}</strong> &bull; ${escapeHtml(timeText)} &bull; ${escapeHtml(s.label || `Unavailable`)}</span>
+      <button type="button" class="pill-btn" style="min-height:36px;padding:0.25rem 0.75rem;font-size:0.875rem;" onclick="removeBlockedSlot(${idx})">Remove</button>
+    </div>`;
+  }).join(``);
+}
+
+function addBlockedSlot() {
+  if (!ownerUnlocked) return;
+  const dateEl = document.getElementById(`adm-blk-date`);
+  const startEl = document.getElementById(`adm-blk-start`);
+  const endEl = document.getElementById(`adm-blk-end`);
+  const labelEl = document.getElementById(`adm-blk-label`);
+  if (!dateEl || !dateEl.value) return;
+
+  if (!Array.isArray(appState.settings.blockedSlots)) {
+    appState.settings.blockedSlots = [];
+  }
+  appState.settings.blockedSlots.push({
+    date: dateEl.value,
+    startTime: startEl ? startEl.value : ``,
+    endTime: endEl ? endEl.value : ``,
+    label: labelEl && labelEl.value.trim() ? labelEl.value.trim() : `Unavailable / Booked`
+  });
+
+  if (startEl) startEl.value = ``;
+  if (endEl) endEl.value = ``;
+  if (labelEl) labelEl.value = ``;
+
+  renderBlockedSlotsAdmin();
+  updateAllUI();
+  persistState();
+}
+
+function removeBlockedSlot(idx) {
+  if (!ownerUnlocked || !Array.isArray(appState.settings.blockedSlots)) return;
+  appState.settings.blockedSlots.splice(idx, 1);
+  renderBlockedSlotsAdmin();
+  updateAllUI();
+  persistState();
+}
+
 function populateOwnerEditor() {
   const s = appState.settings;
   const setVal = function (id, val) {
     const el = document.getElementById(id);
     if (el) el.value = val;
   };
+  setVal(`adm-buffer-hours`, s.bufferHours !== undefined ? s.bufferHours : 2);
   setVal(`adm-origin-name`, s.originName);
   setVal(`adm-origin-lat`, s.originLat);
   setVal(`adm-origin-lng`, s.originLng);
@@ -1342,6 +1625,8 @@ function populateOwnerEditor() {
   setVal(`adm-base-out`, s.baseOut);
   setVal(`adm-per-km`, s.perKmRate);
   setVal(`adm-policy-text`, s.policyText);
+
+  renderBlockedSlotsAdmin();
 
   const grid = document.getElementById(`adm-packages-grid`);
   if (grid) {
@@ -1352,10 +1637,10 @@ function populateOwnerEditor() {
         const img = String(s.images[item.id] || ``);
         const avail = isItemAvailable(item.id);
         html += `<div class="admin-pkg-box">
-          <h4 class="admin-pkg-box-title">${escapeHtml(item.name)}</h4>
+          <h4 class="admin-pkg-box-title">${escapeHtml(item.name)} <span style="font-size:0.85rem;opacity:0.75;">(${escapeHtml(cat.title)})</span></h4>
           <div class="admin-pkg-row">
             <div class="field-group">
-              <label class="field-label" for="adm-price-${item.id}">Price (₱)</label>
+              <label class="field-label" for="adm-price-${item.id}">Base Price (₱)</label>
               <input type="number" min="0" step="1" id="adm-price-${item.id}" class="text-input" value="${p}">
             </div>
             <div class="field-group">
@@ -1377,6 +1662,48 @@ function populateOwnerEditor() {
   }
 }
 
+function addNewPackageCard() {
+  if (!ownerUnlocked) return;
+  const catEl = document.getElementById(`new-pkg-cat`);
+  const nameEl = document.getElementById(`new-pkg-name`);
+  const priceEl = document.getElementById(`new-pkg-price`);
+  const imgEl = document.getElementById(`new-pkg-img`);
+  const descEl = document.getElementById(`new-pkg-desc`);
+
+  const name = nameEl ? nameEl.value.trim() : ``;
+  if (!name) return;
+
+  const catId = catEl ? catEl.value : `addons`;
+  const targetCat = CATALOG_CATEGORIES.find(function (c) { return c.id === catId; });
+  if (!targetCat) return;
+
+  const slug = `custom_${name.toLowerCase().replace(/[^a-z0-9]+/g, `_`) }_${Date.now().toString().slice(-4)}`;
+  const price = Math.max(0, Number(priceEl ? priceEl.value : 0) || 0);
+  const img = imgEl ? imgEl.value.trim() : ``;
+  const desc = descEl && descEl.value.trim() ? descEl.value.trim() : `Custom package added by Konfetti Studio.`;
+
+  targetCat.items.push({
+    id: slug,
+    name: name,
+    placeholderIcon: `🎈`,
+    desc: desc
+  });
+
+  appState.settings.prices[slug] = price;
+  appState.settings.images[slug] = img;
+  appState.settings.availability[slug] = true;
+
+  if (nameEl) nameEl.value = ``;
+  if (priceEl) priceEl.value = ``;
+  if (imgEl) imgEl.value = ``;
+  if (descEl) descEl.value = ``;
+
+  populateOwnerEditor();
+  renderServicesCatalog();
+  updateAllUI();
+  persistState();
+}
+
 function saveOwnerSettings() {
   if (!ownerUnlocked) return;
   const getNum = function (id, fallback) {
@@ -1388,6 +1715,7 @@ function saveOwnerSettings() {
   const originNameEl = document.getElementById(`adm-origin-name`);
   const policyEl = document.getElementById(`adm-policy-text`);
 
+  appState.settings.bufferHours = Math.max(0, getNum(`adm-buffer-hours`, DEFAULT_SETTINGS.bufferHours));
   if (originNameEl && originNameEl.value.trim()) {
     appState.settings.originName = originNameEl.value.trim();
   }
@@ -1404,7 +1732,7 @@ function saveOwnerSettings() {
     cat.items.forEach(function (item) {
       appState.settings.prices[item.id] = Math.max(
         0,
-        getNum(`adm-price-${item.id}`, DEFAULT_SETTINGS.prices[item.id])
+        getNum(`adm-price-${item.id}`, appState.settings.prices[item.id] || 0)
       );
       const imgEl = document.getElementById(`adm-img-${item.id}`);
       if (imgEl) {
@@ -1430,12 +1758,12 @@ function saveOwnerSettings() {
 
 async function copyConfigSnippet(btn) {
   saveOwnerSettings();
-  const snippet = `const DEFAULT_SETTINGS = ${JSON.stringify(appState.settings, null, 2)};`;
+  const snippet = `const DEFAULT_SETTINGS = ${JSON.stringify(appState.settings, null, 2)};\n\nlet CATALOG_CATEGORIES = ${JSON.stringify(CATALOG_CATEGORIES, null, 2)};`;
   try {
     await navigator.clipboard.writeText(snippet);
     if (btn) {
       const orig = btn.textContent;
-      btn.textContent = `✓ Copied DEFAULT_SETTINGS!`;
+      btn.textContent = `✓ Copied Config for app.js!`;
       setTimeout(function () { btn.textContent = orig; }, 2500);
     }
   } catch (err) {
@@ -1477,6 +1805,7 @@ function syncInputsFromState() {
     if (el) el.value = val || ``;
   };
   setVal(`input-customer-name`, b.customerName);
+  setVal(`input-guest-count`, b.guestCount);
   setVal(`input-event-date`, b.eventDate);
   setVal(`input-start-time`, b.startTime);
   setVal(`input-end-time`, b.endTime);

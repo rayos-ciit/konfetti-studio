@@ -20,7 +20,7 @@
       <div class="brand-group">
         <span class="brand-kicker">konfetti studio events &amp; creations</span>
         <h1 class="brand-title">Event Package Builder &amp; Booking Form</h1>
-        <p class="brand-subtitle">Complete these 4 simple steps to see your estimated package and delivery fee, then send a neat booking summary straight to Kiara &amp; Symmone.</p>
+        <p class="brand-subtitle">Follow these 4 clear steps to estimate your package, setup timing, and delivery fee, then copy your summary to send to Kiara &amp; Symmone.</p>
       </div>
       <div class="header-actions">
         <button type="button" id="theme-toggle-btn" class="pill-btn" onclick="toggleTheme()">
@@ -69,12 +69,17 @@
         <section id="panel-step-1" class="card" aria-labelledby="heading-step-1">
           <div class="card-header">
             <h2 class="section-title" id="heading-step-1">Step 1: Event Details &amp; Venue Location</h2>
-            <p class="section-desc">Fill in all required details below. Our system automatically detects whether your venue is within Metro Manila (NCR) or Out-of-NCR to compute delivery accurately.</p>
+            <p class="section-desc">Enter your event date, time, guest count, and venue. Our system automatically detects Metro Manila (NCR) vs. Out-of-NCR and checks schedule buffer times.</p>
           </div>
 
           <div id="step1-error-box" class="callout callout--error is-hidden" role="alert">
             <p class="callout-title">Please complete all required fields before proceeding:</p>
             <p class="callout-text" id="step1-error-text"></p>
+          </div>
+
+          <div id="schedule-conflict-box" class="callout callout--warning is-hidden" role="alert">
+            <p class="callout-title">Schedule &amp; Travel Buffer Notice</p>
+            <p class="callout-text" id="schedule-conflict-text"></p>
           </div>
 
           <div class="form-grid">
@@ -86,10 +91,23 @@
             </div>
 
             <div class="field-group">
+              <label class="field-label" for="input-guest-count">
+                Estimated Guest Count (Pax) <span class="req-mark">Required</span>
+              </label>
+              <input type="number" min="1" max="1000" id="input-guest-count" class="text-input" placeholder="e.g., 40" oninput="handleDetailsInput()">
+              <p class="field-hint">Helps us plan games, balloons, and entertainment flow</p>
+            </div>
+
+            <div class="field-group">
               <label class="field-label" for="input-event-date">
                 Event Date <span class="req-mark">Required</span>
               </label>
               <input type="date" id="input-event-date" class="text-input" onchange="handleDetailsInput()">
+            </div>
+
+            <div class="field-group">
+              <span class="field-label">Scheduled / Blocked Slots on Date</span>
+              <div id="date-slots-readout" class="slot-pills-box">Select an event date to view slots</div>
             </div>
 
             <div class="field-group">
@@ -141,7 +159,7 @@
                 Baseline ₱300 (Metro Manila) + 1.0 km × ₱15/km from Quezon City origin
               </div>
               <p class="transport-disclaimer">
-                Estimate only — final transport fee will be confirmed by Kiara &amp; Symmone based on equipment size and venue access. (Standalone Face Painting or Balloon Twisting can travel by motorcycle at lower rates.)
+                Estimate only — final transport fee will be confirmed by Kiara &amp; Symmone based on equipment size, travel time (~30–60 mins typical), and venue access. (Standalone Face Painting or Balloon Twisting can travel by motorcycle at lower rates.)
               </p>
             </div>
           </div>
@@ -158,7 +176,7 @@
         <section id="panel-step-2" class="card is-hidden" aria-labelledby="heading-step-2">
           <div class="card-header">
             <h2 class="section-title" id="heading-step-2">Step 2: Choose Your Services</h2>
-            <p class="section-desc">Tap a category button below to view its packages. Pick either one Featured Promo Combo OR mix and match one package per individual category.</p>
+            <p class="section-desc">Tap a category tab below. Select one Promo Combo OR mix and match individual services, duration tiers, and letter/size options.</p>
           </div>
 
           <div id="promo-lockout-banner" class="callout callout--warning is-hidden" role="status">
@@ -170,8 +188,10 @@
           <div id="services-container" class="services-stack"></div>
 
           <div class="callout">
-            <p class="callout-title">Have a Theme or Motif in Mind?</p>
-            <p class="callout-text">You can send your peg or reference photos directly to Kiara &amp; Symmone in Facebook Messenger right after copying your summary.</p>
+            <p class="callout-title">On-Site Setup &amp; Preparation Guide</p>
+            <p class="callout-text">
+              Balloon installations and backdrops are styled on-site at your venue (typically <strong>1–2 hours</strong> setup, arriving <strong>2–3 hours</strong> before the event; standalone face painting prepares in ~<strong>15 minutes</strong>).
+            </p>
           </div>
 
           <div class="wizard-actions">
@@ -296,7 +316,7 @@
         <div class="checklist-stack">
           <div class="checklist-item">
             <span class="status-pill" id="chk-name">•</span>
-            <span>Customer Name</span>
+            <span>Customer Name &amp; Pax</span>
           </div>
           <div class="checklist-item">
             <span class="status-pill" id="chk-date">•</span>
@@ -345,8 +365,8 @@
     <!-- Password Gate & Owner Admin Panel -->
     <section id="owner-gate-section" class="admin-panel is-hidden" aria-label="Owner settings access">
       <div class="card-header">
-        <h2 class="section-title owner-title">Owner Pricing, Photos &amp; Availability Settings</h2>
-        <p class="section-desc">Update workshop coordinates, transport rates, package prices, preview images, and availability status.</p>
+        <h2 class="section-title owner-title">Owner Schedule, Pricing, Photos &amp; Catalog Settings</h2>
+        <p class="section-desc">Block unavailable dates/times, set travel buffer hours, edit prices/photos/availability, or add new package cards.</p>
       </div>
 
       <div id="owner-login-box" class="owner-login-row">
@@ -367,41 +387,114 @@
       <div id="owner-editor-box" class="is-hidden owner-editor-stack">
         <div id="owner-save-banner" class="callout callout--positive is-hidden" role="status">
           <p class="callout-title">✓ Settings Saved to This Browser</p>
-          <p class="callout-text">Changes are active immediately on this device. To publish updated prices, images, or availability to all customers on Vercel, click <strong>"Copy Updated app.js Config"</strong> below and paste it into the top of <code>app.js</code>.</p>
+          <p class="callout-text">Changes are active immediately on this device. To publish updated prices, images, schedules, or new packages to all customers on Vercel, click <strong>"Copy Config for Vercel (app.js)"</strong> below and paste it into <code>app.js</code>.</p>
         </div>
 
-        <div class="form-grid">
-          <div class="field-group field-group--full">
-            <label class="field-label" for="adm-origin-name">1. Workshop Origin Address Label</label>
-            <input type="text" id="adm-origin-name" class="text-input">
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="adm-origin-lat">Origin Latitude</label>
-            <input type="number" step="0.0001" id="adm-origin-lat" class="text-input">
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="adm-origin-lng">Origin Longitude</label>
-            <input type="number" step="0.0001" id="adm-origin-lng" class="text-input">
-          </div>
-
-          <div class="field-group">
-            <label class="field-label" for="adm-base-mm">2a. Metro Manila (NCR) Baseline Fee (₱)</label>
-            <input type="number" min="0" step="50" id="adm-base-mm" class="text-input">
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="adm-base-out">2b. Out-of-NCR Baseline Fee (₱)</label>
-            <input type="number" min="0" step="50" id="adm-base-out" class="text-input">
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="adm-per-km">3. Per-Kilometer Transport Rate (₱/km)</label>
-            <input type="number" min="0" step="1" id="adm-per-km" class="text-input">
-          </div>
-        </div>
-
+        <!-- Schedule & Buffer Blocking -->
         <div class="owner-catalog-section">
-          <h3 class="category-title">4. Package Prices, Preview Pictures &amp; Availability</h3>
-          <p class="field-hint">Paste an image URL (e.g., <code>https://...</code>) or relative path (e.g., <code>images/joyful.jpg</code>), and toggle whether each package is currently available for booking.</p>
+          <h3 class="category-title">1. Schedule &amp; Buffer Blocking</h3>
+          <div class="form-grid">
+            <div class="field-group">
+              <label class="field-label" for="adm-buffer-hours">Minimum Travel / Prep Buffer Between Bookings (Hours)</label>
+              <input type="number" min="0" max="12" step="0.5" id="adm-buffer-hours" class="text-input">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="adm-blk-label">Slot Label / Note</label>
+              <input type="text" id="adm-blk-label" class="text-input" placeholder="e.g., Booked Event / Full Day Off">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="adm-blk-date">Date to Block</label>
+              <input type="date" id="adm-blk-date" class="text-input">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="adm-blk-start">Start Time (Leave blank for Whole Day)</label>
+              <input type="time" id="adm-blk-start" class="text-input">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="adm-blk-end">End Time (Leave blank for Whole Day)</label>
+              <input type="time" id="adm-blk-end" class="text-input">
+            </div>
+            <div class="field-group owner-align-end">
+              <button type="button" class="pill-btn" onclick="addBlockedSlot()">+ Add Blocked Date / Time Slot</button>
+            </div>
+          </div>
+          <div id="adm-blocked-slots-list" class="blocked-slots-list"></div>
+        </div>
+
+        <!-- Origin & Transport Rates -->
+        <div class="owner-catalog-section">
+          <h3 class="category-title">2. Workshop Origin &amp; Transport Rates</h3>
+          <div class="form-grid">
+            <div class="field-group field-group--full">
+              <label class="field-label" for="adm-origin-name">Workshop Origin Address Label</label>
+              <input type="text" id="adm-origin-name" class="text-input">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="adm-origin-lat">Origin Latitude</label>
+              <input type="number" step="0.0001" id="adm-origin-lat" class="text-input">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="adm-origin-lng">Origin Longitude</label>
+              <input type="number" step="0.0001" id="adm-origin-lng" class="text-input">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="adm-base-mm">Metro Manila (NCR) Baseline Fee (₱)</label>
+              <input type="number" min="0" step="50" id="adm-base-mm" class="text-input">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="adm-base-out">Out-of-NCR Baseline Fee (₱)</label>
+              <input type="number" min="0" step="50" id="adm-base-out" class="text-input">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="adm-per-km">Per-Kilometer Transport Rate (₱/km)</label>
+              <input type="number" min="0" step="1" id="adm-per-km" class="text-input">
+            </div>
+          </div>
+        </div>
+
+        <!-- Existing Packages -->
+        <div class="owner-catalog-section">
+          <h3 class="category-title">3. Package Prices, Preview Pictures &amp; Availability</h3>
+          <p class="field-hint">Update base prices, availability status, and preview image URLs or paths (e.g., <code>images/joyful.jpg</code>).</p>
           <div id="adm-packages-grid" class="admin-price-grid"></div>
+        </div>
+
+        <!-- Add Brand-New Package Card -->
+        <div class="owner-catalog-section">
+          <h3 class="category-title">4. Add a Brand-New Package Card</h3>
+          <div class="admin-pkg-box">
+            <div class="form-grid">
+              <div class="field-group">
+                <label class="field-label" for="new-pkg-cat">Category</label>
+                <select id="new-pkg-cat" class="select-input">
+                  <option value="combos">Featured Promo Combos</option>
+                  <option value="backdrops">Backdrop Styling</option>
+                  <option value="clowns">Clowns &amp; Performers</option>
+                  <option value="facepaint">Face Painting &amp; Twisting</option>
+                  <option value="addons">Add-Ons</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="new-pkg-name">Package Title</label>
+                <input type="text" id="new-pkg-name" class="text-input" placeholder="e.g., Bubble Show Add-On">
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="new-pkg-price">Base Price (₱)</label>
+                <input type="number" min="0" step="1" id="new-pkg-price" class="text-input" placeholder="e.g., 1500">
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="new-pkg-img">Preview Image URL / Path (Optional)</label>
+                <input type="text" id="new-pkg-img" class="text-input" placeholder="e.g., images/bubble.jpg">
+              </div>
+              <div class="field-group field-group--full">
+                <label class="field-label" for="new-pkg-desc">Description</label>
+                <input type="text" id="new-pkg-desc" class="text-input" placeholder="Short description of what is included">
+              </div>
+            </div>
+            <div>
+              <button type="button" class="pill-btn" onclick="addNewPackageCard()">+ Add Package Card</button>
+            </div>
+          </div>
         </div>
 
         <div class="field-group">
